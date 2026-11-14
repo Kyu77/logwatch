@@ -1,0 +1,29 @@
+# Environnement virtuel
+venv/
+.venv/
+
+# Secrets (URL du webhook, etc.)
+.env
+.env.*
+
+# Rapports produits en local (seul l'exemple final est versionné)
+reports/*
+!reports/.gitkeep
+!reports/exemple_incident.json
+
+# Configuration locale (on ne versionne que config.example.json)
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
