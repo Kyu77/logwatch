@@ -1,8 +1,7 @@
 {
-  "threshold": 0.05,
-  "min_requests": 20,
-  "top": 5,
-  "format": "text",
+  "threshold_5xx": 0.05,
+  "min_requests": 50,
+  "top_n": 10,
   "exclude_paths": ["/health", "/metrics"],
   "webhook_timeout_s": 5
 }

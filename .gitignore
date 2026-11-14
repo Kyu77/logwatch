@@ -12,7 +12,7 @@ reports/*
 !reports/exemple_incident.json
 
 # Configuration locale (on ne versionne que config.example.json)
-config.json
+logwatch.json
 
 # Python
 __pycache__/

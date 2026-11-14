@@ -11,11 +11,12 @@ EXIT_OK = 0          # aucun pic
 EXIT_PEAK = 1        # au moins une minute en pic
 EXIT_ERROR = 2       # fichier absent/illisible, aucune ligne valide, config invalide, --alert sans URL
 
+DEFAULT_CONFIG_PATH = "logwatch.json"   # utilisé seulement s'il existe
+
 DEFAULT_CONFIG = {
-    "threshold": 0.05,
-    "min_requests": 20,
-    "top": 5,
-    "format": "text",
+    "threshold_5xx": 0.05,
+    "min_requests": 50,
+    "top_n": 10,
     "exclude_paths": ["/health", "/metrics"],
     "webhook_timeout_s": 5,
 }

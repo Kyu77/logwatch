@@ -23,7 +23,7 @@ pip install -r requirements.txt
 ## Utilisation (cible)
 
 ```bash
-python logwatch.py data/incident.log --config config.example.json --format json --output reports/incident.json
+python logwatch.py data/incident.log --config config.example.json --top 10 --format json --output reports/incident.json
 ```
 
 ## Variables d'environnement

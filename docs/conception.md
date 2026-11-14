@@ -8,8 +8,13 @@ _Version 1 — 17/11/2026. Sera mise à jour avec la version finale avant le ren
 calcule des indicateurs de santé du site, détecte les minutes où le taux d'erreurs
 5xx dépasse un seuil et, sur demande (`--alert`), prévient l'astreinte par webhook.
 
-Public visé : l'équipe d'astreinte / exploitation, qui veut un diagnostic rapide
-d'un incident à partir d'un fichier de log, en local ou dans une CI.
+Public visé : l'astreinte et l'équipe technique de Lagrange Cuisine. La nuit de la
+Black Week, une panne de paiement (502) a duré 35 minutes sans alerte, et le
+post-mortem n'a pu conclure que « vers 2 h ». `logwatch` doit répondre en une
+commande à « que s'est-il passé cette nuit », avec un simple accès SSH, et donner
+la minute exacte des pics.
+
+Hors périmètre : plateforme de logs (ELK, Loki) et supervision continue.
 
 ## 2. Schéma des modules et du flux
 
@@ -70,14 +75,21 @@ Fichier JSON (voir `config.example.json`) :
 
 | Clé | Type | Défaut | Contrainte |
 |---|---|---|---|
-| `threshold` | float | 0.05 | 0 < x ≤ 1 (taux 5xx dans la minute) |
-| `min_requests` | int | 20 | ≥ 1 (requêtes minimum dans la minute pour être un pic) |
-| `top` | int | 5 | ≥ 1 |
-| `format` | str | `"text"` | `"json"` ou `"text"` |
+| `threshold_5xx` | float | 0.05 | 0 < x ≤ 1 (taux 5xx dans la minute) |
+| `min_requests` | int | 50 | ≥ 1 (requêtes minimum dans la minute pour être un pic) |
+| `top_n` | int | 10 | ≥ 1 |
 | `exclude_paths` | list[str] | `["/health", "/metrics"]` | chaque élément commence par `/` |
 | `webhook_timeout_s` | float | 5 | > 0 |
 
-Priorité : **option CLI > fichier de config > valeur par défaut**.
+Fichier lu : `--config` s'il est donné, sinon `logwatch.json` s'il existe, sinon
+les valeurs par défaut.
+
+Priorité : **option CLI > fichier de config > valeur par défaut**
+(`--threshold` remplace `threshold_5xx`, `--top` remplace `top_n`).
+
+Options CLI : fichier (positionnel), `--config`, `--threshold`, `--top`,
+`--format json|text` (défaut `text`), `--output` (défaut stdout), `--alert`,
+`--verbose` (logs DEBUG au lieu de INFO).
 Toute clé de type ou de valeur incohérente → message d'erreur et code 2.
 L'URL du webhook n'est **jamais** dans la config : uniquement dans la variable
 d'environnement `LOGWATCH_WEBHOOK_URL`.
@@ -88,19 +100,21 @@ Rapport JSON (le rapport texte présente les mêmes informations de façon lisib
 
 ```json
 {
-  "lines": {"total": 1203, "valid": 1198, "invalid": 5, "excluded": 40,
-            "invalid_samples": ["...", "..."]},
-  "summary": {"requests": 1158, "rate_5xx": 0.031, "rate_4xx": 0.012,
-              "latency_avg": 0.118, "latency_p95": 0.402, "latency_max": 2.31},
-  "top_ips":   [{"ip": "203.0.113.7", "count": 210}],
-  "top_paths": [{"path": "/api/orders", "count": 340}],
-  "peaks": [{"minute": "20/Nov/2026:02:07", "requests": 48, "errors_5xx": 19, "rate_5xx": 0.396}],
+  "tool": "logwatch",
+  "source": "data/incident.log",
+  "lines": { "valid": 9980, "invalid": 20, "invalid_samples": ["garbage line without structure"] },
+  "summary": { "requests": 9980, "rate_5xx": 0.012, "rate_4xx": 0.041,
+               "latency_s": { "mean": 0.092, "p95": 0.480, "max": 30.001 } },
+  "top_ips":   [ { "ip": "198.51.100.23", "requests": 912 } ],
+  "top_paths": [ { "path": "/api/orders", "requests": 4021 } ],
+  "peaks":     [ { "minute": "20/Nov/2026:02:07", "requests": 190, "rate_5xx": 0.18 } ],
   "alert_sent": false,
   "exit_code": 1
 }
 ```
 
-_Le format exact sera aligné sur l'exemple du sujet._
+_Valeurs d'exemple, pas un résultat mesuré._ `invalid_samples` contient au plus
+les 5 premières lignes invalides.
 
 ## 6. Codes de sortie
 
