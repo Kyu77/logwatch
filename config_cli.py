@@ -1,4 +1,15 @@
-
+# Fichier mis à jour
+# Prérequis : Avoir des fichiers de logs dans le dossier /data & avoir le fichier logwatch.json
+"""
+Contenu du fichier logwatch.json:
+{
+  "threshold_5xx": 0.05,
+  "min_requests": 50,
+  "top_n": 10,
+  "exclude_paths": ["/health", "/metrics"],
+  "webhook_timeout_s": 5
+}
+"""
 import argparse
 import json
 import logging
