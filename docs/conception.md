@@ -1,6 +1,6 @@
-# logwatch — Document de conception (v1)
+# logwatch — Document de conception
 
-_Version 1 — 17/11/2026. Sera mise à jour avec la version finale avant le rendu._
+_Version 2 — 25/11/2026 : alignée sur le code des étapes 2 à 6. Sera mise à jour avec la version finale avant le rendu._
 
 ## 1. Objectif
 
@@ -18,45 +18,42 @@ Hors périmètre : plateforme de logs (ELK, Loki) et supervision continue.
 
 ## 2. Schéma des modules et du flux
 
-Le code est dans un seul fichier `logwatch.py`, découpé en fonctions à
-responsabilité unique :
+Le code est découpé en un fichier par rôle. Chacun peut travailler sur son
+fichier sans conflit git, et `logwatch.py` relie le tout :
 
 ```
-            argv                     config.json (optionnel)
-              │                              │
-              ▼                              ▼
-        parse_args() ───────────────► load_config()
-              │        fusion : CLI > config > défauts
-              ▼
-         read_log(path)  ──► parse_line(line)  (regex, ligne par ligne)
-              │                 │
-              │                 └─ ligne invalide : comptée + 5 premières en échantillon
-              ▼
-       compute_stats(entries)
-         ├─ volume, taux 4xx, taux 5xx
-         ├─ top N IP / top N routes
-         ├─ latences : moyenne, p95, max
-         └─ agrégation par minute ──► détection des pics
-              │
-              ▼
-       build_report()  ──► JSON ou texte ──► fichier (--output) ou stdout
-              │
-              ▼  (si --alert ET au moins un pic)
-       send_alert()  ──► POST LOGWATCH_WEBHOOK_URL
-              │
-              ▼
-          code de sortie (0 / 1 / 2)
+        argv              logwatch.json / --config (optionnel)
+          │                         │
+          ▼                         ▼
+   config_cli.parse_args()   config_cli.load_config()
+          └──────────┬──────────────┘
+                     ▼
+         config_cli.merge_config()      priorité : CLI > config > défauts
+                     │
+                     ▼
+         logparser.read_logs()          regex, ligne par ligne,
+                     │                  lignes invalides comptées (5 en échantillon)
+                     ▼
+         logstats.compute_stats()       volume, taux 5xx/4xx, tops, latences,
+                     │                  agrégation par minute, pics
+                     ▼
+         report.get_exit_code()         0 aucun pic / 1 au moins un pic
+                     │
+                     ▼  (si --alert ET au moins un pic)
+         send_alert()                   POST vers LOGWATCH_WEBHOOK_URL
+                     │
+                     ▼
+         report.build_report() + write_report()   JSON ou texte, fichier ou stdout
 ```
 
-| Fonction | Rôle | Responsable |
-|---|---|---|
-| `parse_args` | options CLI (argparse) | B |
-| `load_config` | lecture + validation JSON | B |
-| `parse_line` / `read_log` | regex, lecture ligne à ligne, lignes invalides, `exclude_paths` | A |
-| `compute_stats` | indicateurs, agrégation par minute, pics | A |
-| `build_report` | rapport JSON / texte | B |
-| `send_alert` | webhook | B |
-| `main` | orchestration, logging, codes de sortie | A + B |
+| Fichier | Fonctions | Rôle | Auteur |
+|---|---|---|---|
+| `generate_logs.py` | `generate` | fabrique `data/incident.log` et `data/calme.log` | Hugo |
+| `logparser.py` | `read_logs`, `new_stats` | regex, lecture ligne à ligne, lignes invalides, `exclude_paths` | Christopher |
+| `config_cli.py` | `parse_args`, `load_config`, `merge_config`, `setup_logging` | CLI, config JSON validée, priorité, logging | Christopher |
+| `logstats.py` | `compute_stats` | indicateurs, agrégation par minute, pics | Hugo |
+| `report.py` | `get_exit_code`, `build_report`, `to_text`, `write_report` | rapport JSON / texte, code 0 ou 1 | Hugo |
+| `logwatch.py` | `main`, `send_alert` | relie les fichiers, webhook, code 2 en cas d'erreur | à faire |
 
 ## 3. Format d'entrée
 
@@ -66,8 +63,10 @@ Une ligne nginx *combined* + `$request_time` :
 203.0.113.7 - - [20/Nov/2026:02:07:13 +0100] "GET /api/orders?id=4 HTTP/1.1" 502 157 "-" "curl/8.5" 0.342
 ```
 
-Champs extraits : IP, minute (`20/Nov/2026:02:07`), méthode, route sans query
-string (`/api/orders`), code HTTP, latence en secondes.
+Champs gardés pour chaque requête valide : IP, minute (`20/Nov/2026:02:07`),
+route sans query string (`/api/orders`), code HTTP, latence en secondes.
+La méthode (GET, POST) est reconnue par la regex mais n'est pas gardée : le
+rapport n'en a pas besoin.
 
 ## 4. Format de la configuration
 
@@ -75,11 +74,14 @@ Fichier JSON (voir `config.example.json`) :
 
 | Clé | Type | Défaut | Contrainte |
 |---|---|---|---|
-| `threshold_5xx` | float | 0.05 | 0 < x ≤ 1 (taux 5xx dans la minute) |
+| `threshold_5xx` | float | 0.05 | 0 ≤ x ≤ 1 (taux 5xx dans la minute) |
 | `min_requests` | int | 50 | ≥ 1 (requêtes minimum dans la minute pour être un pic) |
 | `top_n` | int | 10 | ≥ 1 |
-| `exclude_paths` | list[str] | `["/health", "/metrics"]` | chaque élément commence par `/` |
+| `exclude_paths` | list[str] | `["/health", "/metrics"]` | chaque élément est une chaîne non vide |
 | `webhook_timeout_s` | float | 5 | > 0 |
+
+Une clé inconnue dans le fichier est refusée. Les clés absentes prennent la
+valeur par défaut.
 
 Fichier lu : `--config` s'il est donné, sinon `logwatch.json` s'il existe, sinon
 les valeurs par défaut.
@@ -152,3 +154,6 @@ les 5 premières lignes invalides.
 - Une minute avec moins de `min_requests` requêtes n'est jamais un pic, même à 100 % de 5xx.
 - Pas de lecture des logs rotés ni compressés dans le socle (extension prévue).
 - Pas de nouvelle tentative si le webhook échoue.
+- Le p95 suit la règle du sujet (`int(0.95 * len)`) : sur très peu de requêtes,
+  il est égal au maximum.
+- Les données de test ne contiennent pas de 4xx : le taux 4xx vaut 0 dans nos tests.
