@@ -29,12 +29,16 @@ pip install -r requirements.txt
 | `config_cli.py` | options de la ligne de commande et configuration JSON |
 | `logstats.py` | calcule les indicateurs et détecte les pics |
 | `report.py` | produit le rapport JSON ou texte et le code de sortie |
+| `webhook.py` | envoie l'alerte à l'astreinte par webhook (uniquement avec `--alert` et s'il y a un pic) |
 | `logwatch.py` | point d'entrée : relie les fichiers (en cours) |
 
 ## Utilisation (cible)
 
 ```bash
 python logwatch.py data/incident.log --config config.example.json --top 10 --format json --output reports/incident.json
+
+export LOGWATCH_WEBHOOK_URL="http://127.0.0.1:8000/webhook"
+python logwatch.py data/incident.log --alert
 ```
 
 _Exemple de sortie : à ajouter quand `logwatch.py` sera terminé._
@@ -54,7 +58,15 @@ Copier `config.example.json` en `logwatch.json` pour l'utiliser par défaut
 
 | Variable | Rôle |
 |---|---|
-| `LOGWATCH_WEBHOOK_URL` | URL du webhook d'alerte (obligatoire avec `--alert`, jamais commitée) |
+| `LOGWATCH_WEBHOOK_URL` | URL du webhook d'alerte (obligatoire avec `--alert`, jamais commitée) | Elle est créée directement depuis le terminal bash
+
+Définir la variable avant de lancer l'outil (valable pour le terminal en cours) :
+
+```bash
+export LOGWATCH_WEBHOOK_URL="https://..."          # Linux / macOS
+$env:LOGWATCH_WEBHOOK_URL = "https://..."          # PowerShell
+```
+
 
 ## Codes de sortie
 
@@ -70,8 +82,8 @@ Copier `config.example.json` en `logwatch.json` pour l'utiliser par défaut
 |---|---|
 | Générateur et données de test (`generate_logs.py`) | Regex et parsing des lignes (`logparser.py`) |
 | Calcul des indicateurs et des pics (`logstats.py`) | Config JSON, validation, CLI argparse, logging (`config_cli.py`) |
-| Rapport JSON/texte et codes de sortie (`report.py`) | |
-| _à répartir : `main()`, webhook, pipeline CI, extension « incidents »_ | |
+| Rapport JSON/texte et codes de sortie (`report.py`) | Webhook pour l'envoi d'alerte à l'astreinte (`webhook.py`) |
+| _à répartir : `main()`, pipeline CI, extension « incidents »_ | |
 
 Ensemble : README, `docs/conception.md`, revue croisée du code, préparation de la soutenance.
 
